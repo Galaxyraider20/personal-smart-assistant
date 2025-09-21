@@ -48,8 +48,6 @@ class AvailabilitySlot:
     end: datetime
     duration_minutes: int
 
-
-
 def _to_rfc3339(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -154,6 +152,7 @@ class GoogleCalendarClient:
                 access_type='offline',
                 include_granted_scopes='true',
                 prompt='consent'
+
             )
             
             # Store flow for callback
@@ -265,6 +264,8 @@ class GoogleCalendarClient:
                 calendarId='primary',
                 timeMin=_to_rfc3339(start_date),
                 timeMax=_to_rfc3339(end_date),
+#                 timeMin=start_date.isoformat() + 'Z',
+#                 timeMax=end_date.isoformat() + 'Z',
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()

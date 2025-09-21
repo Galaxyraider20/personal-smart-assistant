@@ -2,8 +2,8 @@
 Google Calendar OAuth Authentication Routes
 """
 
-from typing import Optional
 
+from typing import Optional
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 
@@ -39,6 +39,24 @@ async def google_login(request: Request):
     try:
         await client.initialize()
         auth_url = client.get_auth_url()
+=======
+from ..utils.helpers import create_success_response, create_error_response
+
+router = APIRouter(prefix="/auth", tags=["authentication"])
+
+# Global client instance (in production, use dependency injection)
+calendar_client = None
+
+@router.get("/google/login")
+async def google_login():
+    """Initiate Google OAuth flow"""
+    global calendar_client
+    if not calendar_client:
+        calendar_client = GoogleCalendarClient()
+        await calendar_client.initialize()
+    
+    try:
+        auth_url = calendar_client.get_auth_url()
         return RedirectResponse(url=auth_url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Auth error: {str(e)}")
@@ -49,6 +67,11 @@ async def google_callback(request: Request):
     """Handle Google OAuth callback"""
     client = _ensure_client(request)
 
+
+@router.get("/google/callback")
+async def google_callback(request: Request):
+    """Handle Google OAuth callback"""
+    global calendar_client
     try:
         auth_code = request.query_params.get('code')
         if not auth_code:
@@ -56,11 +79,15 @@ async def google_callback(request: Request):
 
         success = await client.handle_auth_callback(auth_code)
 
+        
+#         success = await calendar_client.handle_auth_callback(auth_code)
+        
+
         if success:
             return HTMLResponse("""
                 <html>
                     <body>
-                        <h1>Authentication Successful!</h1>
+                        <h1>✅ Authentication Successful!</h1>
                         <p>You can now use myAssist Calendar Agent.</p>
                         <p>Close this window and try the chat interface.</p>
                         <script>
@@ -71,7 +98,6 @@ async def google_callback(request: Request):
             """)
         else:
             raise HTTPException(status_code=400, detail="Authentication failed")
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Callback error: {str(e)}")
 
@@ -89,4 +115,19 @@ async def auth_status(request: Request):
         "message": "Connected to Google Calendar" if client.is_connected else "Not authenticated"
     }
 
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Callback error: {str(e)}")
 
+@router.get("/status")
+async def auth_status():
+    """Check authentication status"""
+    global calendar_client
+    
+    if not calendar_client:
+        return {"authenticated": False, "message": "Calendar client not initialized"}
+    
+    return {
+        "authenticated": calendar_client.is_connected,
+        "message": "Connected to Google Calendar" if calendar_client.is_connected else "Not authenticated"
+    }
