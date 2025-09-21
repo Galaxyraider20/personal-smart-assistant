@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { requestChatReply } from "@/lib/chat-api";
+import { sendChatMessage, formatChatReply } from "@/lib/chat";
+import { getActiveUserId } from "@/lib/user";
 
 type Msg = { id: number; sender: "user" | "bot"; text: string };
 
@@ -9,6 +10,7 @@ export default function Chatbot() {
   ]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -25,10 +27,20 @@ export default function Chatbot() {
     setIsSending(true);
 
     try {
-      const reply = await requestChatReply(text);
+      const response = await sendChatMessage({
+        message: text,
+        conversationId,
+        userId: getActiveUserId() || "anonymous",
+      });
+
+      if (response.conversation_id) {
+        setConversationId(response.conversation_id);
+      }
+
+      const replyText = formatChatReply(response);
       setMessages((prev) => [
         ...prev,
-        { id: Date.now(), sender: "bot", text: reply },
+        { id: Date.now(), sender: "bot", text: replyText },
       ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Chat request failed.";
@@ -42,17 +54,22 @@ export default function Chatbot() {
   };
 
   return (
-    <div className="h-full w-full flex flex-col">
-      <div className="flex-1 min-h-0 mx-auto w-full max-w-4xl p-4">
-        <div className="h-full bg-card text-card-foreground border border-border rounded-xl shadow-lg flex flex-col">
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+    <div className="min-h-screen w-full bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-foreground">
+      <div className="mx-auto max-w-5xl p-6 md:p-10 space-y-6">
+        <header className="space-y-2">
+          <h1 className="text-2xl md:text-3xl font-semibold text-white">Assistant Chat</h1>
+          <p className="text-sm text-slate-300">Ask anything about your tasks, schedule, or notes.</p>
+        </header>
+
+        <div className="rounded-3xl border border-white/10 bg-slate-900/70 shadow-2xl backdrop-blur-xl flex flex-col h-[70vh]">
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-3">
             {messages.map((m) => (
               <div
                 key={m.id}
-                className={`max-w-[80%] p-2 rounded-2xl text-sm shadow
+                className={`max-w-3xl px-4 py-3 rounded-2xl text-sm shadow-sm transition-colors tracking-wide leading-relaxed
                   ${m.sender === "bot"
-                    ? "bg-muted text-foreground self-start"
-                    : "bg-primary text-primary-foreground self-end ml-auto"}`}
+                    ? "bg-slate-800/80 text-slate-100 border border-white/5"
+                    : "bg-primary text-primary-foreground ml-auto"}`}
               >
                 {m.text}
               </div>
@@ -60,10 +77,10 @@ export default function Chatbot() {
             <div ref={bottomRef} />
           </div>
 
-          <div className="border-t border-border p-3 flex gap-2 bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="border-t border-white/10 px-6 py-4 bg-slate-900/80 backdrop-blur flex gap-3">
             <input
-              className="flex-1 bg-background text-foreground placeholder:text-muted-foreground border border-border rounded-lg px-3 py-2 text-sm
-                         focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="flex-1 bg-slate-950/80 text-slate-100 placeholder:text-slate-500 border border-white/10 rounded-2xl px-4 py-3 text-sm
+                         focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your message..."
@@ -71,7 +88,7 @@ export default function Chatbot() {
               disabled={isSending}
             />
             <button
-              className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
+              className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-50"
               onClick={() => void handleSend()}
               disabled={isSending || input.trim().length === 0}
             >
