@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { requestChatReply } from "@/lib/chat-api";
+import { requestChatReply, type ChatResponsePayload } from "@/lib/chat-api";
+import { getActiveUserId } from "@/lib/user";
 import { Send, X, MessageCircle } from "lucide-react";
 
 /**
@@ -105,6 +106,24 @@ export default function HomeDashboard({
 
 type ChatMessage = { role: "user" | "bot"; text: string };
 
+function formatChatReply(response: ChatResponsePayload): string {
+  const pieces: string[] = [response.message];
+
+  if (response.requires_confirmation) {
+    pieces.push("The agent needs your confirmation to finish this request.");
+  }
+
+  if (response.suggestions?.length) {
+    pieces.push(`Suggestions: ${response.suggestions.join(", ")}`);
+  }
+
+  if (!response.success) {
+    pieces.push("The agent reported a problem while processing your request.");
+  }
+
+  return pieces.filter(Boolean).join("\n\n");
+}
+
 function ChatWidget() {
   const [isOpen, setIsOpen] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -112,6 +131,7 @@ function ChatWidget() {
   ]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const canSend = useMemo(() => input.trim().length > 0 && !isSending, [input, isSending]);
@@ -132,8 +152,16 @@ function ChatWidget() {
     setIsSending(true);
 
     try {
-      const reply = await requestChatReply(text);
-      setMessages((prev) => [...prev, { role: "bot", text: reply }]);
+      const response = await requestChatReply({
+        message: text,
+        conversationId,
+        userId: getActiveUserId(),
+      });
+
+      setConversationId(response.conversation_id);
+
+      const replyText = formatChatReply(response);
+      setMessages((prev) => [...prev, { role: "bot", text: replyText }]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Chat request failed.";
       setMessages((prev) => [

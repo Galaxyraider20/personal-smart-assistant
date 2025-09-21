@@ -1,7 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import { requestChatReply } from "@/lib/chat-api";
+import { requestChatReply, type ChatResponsePayload } from "@/lib/chat-api";
+import { getActiveUserId } from "@/lib/user";
 
 type Msg = { id: number; sender: "user" | "bot"; text: string };
+
+function formatChatReply(response: ChatResponsePayload): string {
+  const pieces: string[] = [response.message];
+
+  if (response.requires_confirmation) {
+    pieces.push("The agent needs your confirmation to finish this request.");
+  }
+
+  if (response.suggestions?.length) {
+    pieces.push(`Suggestions: ${response.suggestions.join(", ")}`);
+  }
+
+  if (!response.success) {
+    pieces.push("The agent reported a problem while processing your request.");
+  }
+
+  return pieces.filter(Boolean).join("\n\n");
+}
 
 export default function Chatbot() {
   const [messages, setMessages] = useState<Msg[]>([
@@ -9,6 +28,7 @@ export default function Chatbot() {
   ]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -25,10 +45,18 @@ export default function Chatbot() {
     setIsSending(true);
 
     try {
-      const reply = await requestChatReply(text);
+      const response = await requestChatReply({
+        message: text,
+        conversationId,
+        userId: getActiveUserId(),
+      });
+
+      setConversationId(response.conversation_id);
+
+      const replyText = formatChatReply(response);
       setMessages((prev) => [
         ...prev,
-        { id: Date.now(), sender: "bot", text: reply },
+        { id: Date.now(), sender: "bot", text: replyText },
       ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Chat request failed.";
