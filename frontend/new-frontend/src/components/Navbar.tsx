@@ -6,9 +6,9 @@ import {
   SidebarItemGroup,
   SidebarItems,
   SidebarLogo,
-  createTheme
 } from "flowbite-react";
-import { HiHome, HiChatAlt2, HiCalendar, HiCog } from "react-icons/hi";
+import { HiChatAlt2, HiCalendar, HiCog, HiHome, HiUser } from "react-icons/hi";
+
 const sidebarTheme = {
   root: {
     base: "h-screen",
@@ -17,12 +17,13 @@ const sidebarTheme = {
       off: "w-64",
     },
     inner:
-      "h-full overflow-y-auto overflow-x-hidden rounded bg-slate-800 px-3 py-4 dark:bg-slate-800",
+      "flex h-full flex-col overflow-y-auto overflow-x-hidden rounded bg-slate-800 px-3 py-4 dark:bg-slate-800",
   },
 };
+
 export default function DefaultSidebar() {
   return (
-    <Sidebar 
+    <Sidebar
       theme={sidebarTheme}
       applyTheme={{ root: { base: "replace" } }}
       aria-label="App sidebar"
@@ -30,8 +31,9 @@ export default function DefaultSidebar() {
       <SidebarLogo href="#" img={logoUrl} imgAlt="Flowbite logo">
         <span className="text-lg font-semibold text-white">Calvera</span>
       </SidebarLogo>
-      <SidebarItems>
-        <SidebarItemGroup>
+
+      <SidebarItems className="flex flex-1 flex-col gap-4">
+        <SidebarItemGroup className="space-y-1">
           <SidebarItem
             href="#"
             icon={HiHome}
@@ -55,6 +57,7 @@ export default function DefaultSidebar() {
           >
             Calendar
           </SidebarItem>
+
           <SidebarItem
             href="#settings"
             icon={HiCog}
@@ -62,7 +65,16 @@ export default function DefaultSidebar() {
           >
             Settings
           </SidebarItem>
-          
+        </SidebarItemGroup>
+
+        <SidebarItemGroup className="mt-auto border-t border-white/10 pt-4 space-y-1">
+          <SidebarItem
+            href="#profile"
+            icon={HiUser}
+            className="text-base font-medium tracking-wide hover:text-white"
+          >
+            Profile
+          </SidebarItem>
         </SidebarItemGroup>
       </SidebarItems>
     </Sidebar>

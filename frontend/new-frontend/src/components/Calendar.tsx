@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
@@ -32,7 +32,6 @@ function isSameMonth(a: Date, b: Date) { return a.getFullYear() === b.getFullYea
 function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function addMonths(d: Date, n: number) { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; }
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
-function endOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth()+1, 0); }
 function startOfWeek(d: Date, weekStartsOn: 0|1) {
   const x = startOfDay(d);
   const day = x.getDay(); // 0..6 (Sun..Sat)
@@ -219,3 +218,5 @@ function formatTimeRange(ev: CalEvent) {
   const fmt = (d: Date) => d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   return e ? `${fmt(s)} – ${fmt(e)}` : fmt(s);
 }
+
+
