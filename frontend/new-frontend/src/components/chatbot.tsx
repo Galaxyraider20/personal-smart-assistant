@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { requestChatReply, type ChatResponsePayload } from "@/lib/chat-api";
 import { getActiveUserId } from "@/lib/user";
 
 type Msg = { id: number; sender: "user" | "bot"; text: string };

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { requestChatReply, type ChatResponsePayload } from "@/lib/chat-api";
+import { sendChatMessage, formatChatReply } from "@/lib/chat";
 import { getActiveUserId } from "@/lib/user";
 import { Send, X, MessageCircle } from "lucide-react";
 
@@ -106,24 +106,6 @@ export default function HomeDashboard({
 
 type ChatMessage = { role: "user" | "bot"; text: string };
 
-function formatChatReply(response: ChatResponsePayload): string {
-  const pieces: string[] = [response.message];
-
-  if (response.requires_confirmation) {
-    pieces.push("The agent needs your confirmation to finish this request.");
-  }
-
-  if (response.suggestions?.length) {
-    pieces.push(`Suggestions: ${response.suggestions.join(", ")}`);
-  }
-
-  if (!response.success) {
-    pieces.push("The agent reported a problem while processing your request.");
-  }
-
-  return pieces.filter(Boolean).join("\n\n");
-}
-
 function ChatWidget() {
   const [isOpen, setIsOpen] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -152,13 +134,15 @@ function ChatWidget() {
     setIsSending(true);
 
     try {
-      const response = await requestChatReply({
+      const response = await sendChatMessage({
         message: text,
         conversationId,
-        userId: getActiveUserId(),
+        userId: getActiveUserId() || "anonymous",
       });
 
-      setConversationId(response.conversation_id);
+      if (response.conversation_id) {
+        setConversationId(response.conversation_id);
+      }
 
       const replyText = formatChatReply(response);
       setMessages((prev) => [...prev, { role: "bot", text: replyText }]);
