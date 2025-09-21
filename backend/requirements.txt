@@ -1,0 +1,14 @@
+aiohttp==3.12.15
+fastapi==0.117.1
+google_api_python_client==2.182.0
+google_auth_oauthlib==1.2.2
+numpy==2.3.3
+protobuf==6.32.1
+pydantic==2.11.9
+PyJWT==2.10.1
+python-dotenv==1.1.1
+python_dateutil==2.9.0.post0
+pytz==2025.2
+supermemory==3.3.0
+uvicorn==0.36.0
+websockets==15.0.1
