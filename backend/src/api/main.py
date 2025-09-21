@@ -27,6 +27,7 @@ from ..services.agent_registry import AgentRegistry, AgentStatus
 from .chat_routes import chat_router
 from .agent_routes import agent_router
 from .auth_routes import router as auth_router
+from .calendar_routes import calendar_router
 
 # Configure logging
 logging.basicConfig(
@@ -165,6 +166,8 @@ def create_app() -> FastAPI:
         auth_router,
         tags=["Authentication"]
         )
+
+    app.include_router(calendar_router)
     
     return app
 
