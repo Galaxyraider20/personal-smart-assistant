@@ -6,7 +6,7 @@ Replaces MCP approach with direct Google API calls
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 import os
 import json
@@ -47,6 +47,16 @@ class AvailabilitySlot:
     start: datetime
     end: datetime
     duration_minutes: int
+
+def _to_rfc3339(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    formatted = dt.isoformat()
+    if formatted.endswith('+00:00'):
+        return formatted[:-6] + 'Z'
+    return formatted
 
 class GoogleCalendarClient:
     """
@@ -140,7 +150,9 @@ class GoogleCalendarClient:
             
             authorization_url, _ = flow.authorization_url(
                 access_type='offline',
-                include_granted_scopes='true'
+                include_granted_scopes='true',
+                prompt='consent'
+
             )
             
             # Store flow for callback
@@ -250,8 +262,10 @@ class GoogleCalendarClient:
         try:
             events_result = self.service.events().list(
                 calendarId='primary',
-                timeMin=start_date.isoformat() + 'Z',
-                timeMax=end_date.isoformat() + 'Z',
+                timeMin=_to_rfc3339(start_date),
+                timeMax=_to_rfc3339(end_date),
+#                 timeMin=start_date.isoformat() + 'Z',
+#                 timeMax=end_date.isoformat() + 'Z',
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()

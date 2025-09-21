@@ -4,6 +4,7 @@ backend/config/*.env
 backend/config/.env.local
 backend/config/.env.production
 backend/config/google_token.json
+
 .env
 *.env
 
