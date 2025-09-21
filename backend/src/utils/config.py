@@ -115,16 +115,25 @@ class Config:
     
     def load_environment(self) -> None:
         """Load environment variables from .env file if it exists"""
-        env_path = Path(__file__).parent.parent / 'config' / '.env'
+        # env_path = Path(__file__).parent.parent / 'config' / '.env'
         
-        if env_path.exists():
-            with open(env_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#'):
-                        key, value = line.split('=', 1)
-                        os.environ.setdefault(key, value)
-            logger.info(f"Loaded environment from {env_path}")
+        # if env_path.exists():
+        #     with open(env_path, 'r') as f:
+        #         for line in f:
+        #             line = line.strip()
+        #             if line and not line.startswith('#'):
+        #                 key, value = line.split('=', 1)
+        #                 os.environ.setdefault(key, value)
+        #     logger.info(f"Loaded environment from {env_path}")
+        from dotenv import load_dotenv
+    
+        # Find the backend directory (where this should be run from)
+        current_file = Path(__file__)  # src/utils/config.py
+        backend_dir = current_file.parent.parent.parent  # Go up to backend/
+        env_path = backend_dir / "config" / ".env"
+        # env_path = ''
+        load_dotenv(env_path)
+        logger.info(f"Loaded environment from {env_path}")
     
     def load_mcp_server_config(self) -> Dict[str, Any]:
         """Load MCP server configuration from JSON file"""
