@@ -1,0 +1,146 @@
+{
+  "$schema": "https://github.com/modelcontextprotocol/specification/blob/main/schema/mcp_config_schema.json",
+  "description": "myAssist Calendar Agent - Model Context Protocol Configuration",
+  "version": "1.0.0",
+  "mcpServers": {
+    "google-calendar": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-google-calendar"
+      ],
+      "env": {
+        "GOOGLE_CLIENT_ID": "${GOOGLE_CLIENT_ID}",
+        "GOOGLE_CLIENT_SECRET": "${GOOGLE_CLIENT_SECRET}",
+        "GOOGLE_REDIRECT_URI": "${GOOGLE_REDIRECT_URI}",
+        "MCP_SERVER_PORT": "8080",
+        "NODE_ENV": "production"
+      },
+      "capabilities": [
+        "calendar.read",
+        "calendar.write",
+        "calendar.events.read", 
+        "calendar.events.write",
+        "calendar.events.delete",
+        "calendar.freebusy.read"
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/calendar.readonly"
+      ],
+      "security": {
+        "auth_method": "oauth2",
+        "token_refresh": true,
+        "scope_validation": true,
+        "rate_limiting": {
+          "requests_per_minute": 1000,
+          "requests_per_hour": 10000
+        }
+      },
+      "settings": {
+        "default_calendar": "primary",
+        "timezone": "UTC",
+        "event_reminder_default": 15,
+        "max_results_per_query": 250,
+        "sync_interval": 300,
+        "retry_attempts": 3,
+        "timeout_seconds": 30
+      },
+      "logging": {
+        "level": "info",
+        "file": "logs/mcp-google-calendar.log",
+        "max_size": "10MB",
+        "max_files": 5
+      }
+    },
+    "supermemory": {
+      "command": "python",
+      "args": [
+        "-m",
+        "supermemory.mcp_server"
+      ],
+      "env": {
+        "SUPERMEMORY_API_KEY": "${SUPERMEMORY_API_KEY}",
+        "SUPERMEMORY_API_URL": "${SUPERMEMORY_API_URL}",
+        "SUPERMEMORY_USER_ID": "${SUPERMEMORY_USER_ID}",
+        "SUPERMEMORY_SPACE": "${SUPERMEMORY_SPACE}",
+        "MCP_SERVER_PORT": "8081"
+      },
+      "capabilities": [
+        "memory.read",
+        "memory.write", 
+        "memory.search",
+        "context.retrieve",
+        "preferences.manage"
+      ],
+      "settings": {
+        "memory_retention_days": 365,
+        "auto_summarize": true,
+        "context_window": 10,
+        "search_similarity_threshold": 0.7,
+        "max_memories_per_query": 50
+      },
+      "logging": {
+        "level": "info",
+        "file": "logs/mcp-supermemory.log"
+      }
+    }
+  },
+  "client": {
+    "name": "myAssist-Calendar-Agent",
+    "version": "1.0.0",
+    "user_agent": "myAssist/1.0.0 (Calendar Agent)",
+    "timeout": 30,
+    "retry_policy": {
+      "max_retries": 3,
+      "backoff_factor": 1.5,
+      "max_delay": 60
+    },
+    "connection": {
+      "keep_alive": true,
+      "pool_connections": 10,
+      "pool_maxsize": 20
+    }
+  },
+  "security": {
+    "tls": {
+      "verify": true,
+      "cert_file": null,
+      "key_file": null,
+      "ca_file": null
+    },
+    "authentication": {
+      "method": "bearer_token",
+      "token_header": "Authorization",
+      "token_prefix": "Bearer"
+    },
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_second": 10,
+      "burst_size": 20
+    }
+  },
+  "monitoring": {
+    "health_check_interval": 30,
+    "metrics": {
+      "enabled": true,
+      "port": 9090,
+      "endpoint": "/metrics"
+    },
+    "alerts": {
+      "connection_failure": true,
+      "high_error_rate": true,
+      "response_time_threshold": 5000
+    }
+  },
+  "development": {
+    "debug_mode": false,
+    "log_requests": false,
+    "mock_responses": false,
+    "test_endpoints": {
+      "google_calendar_test": "http://localhost:8080/test",
+      "supermemory_test": "http://localhost:8081/test"
+    }
+  }
+}
