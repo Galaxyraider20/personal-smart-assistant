@@ -13,28 +13,41 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
 
   return (
     <div className="min-h-screen bg-background p-6 text-foreground">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-        {user ? <ProfileDetails /> : <AuthGateway />}
+        {loading ? (
+          <Card className="rounded-2xl border border-border bg-card text-card-foreground">
+            <CardHeader>
+              <CardTitle className="text-xl">Loading profile</CardTitle>
+              <CardDescription>Checking your sign-in status...</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Just a moment while we connect to Firebase.
+              </p>
+            </CardContent>
+          </Card>
+        ) : user ? (
+          <ProfileDetails />
+        ) : (
+          <AuthGateway />
+        )}
         <Card className="rounded-2xl border border-border bg-card text-card-foreground">
           <CardHeader>
-            <CardTitle className="text-lg">How this demo works</CardTitle>
+            <CardTitle className="text-lg">Next steps</CardTitle>
             <CardDescription>
-              This placeholder auth layer keeps everything in the browser so the UI is ready while you wire up a real
-              backend.
+              The UI is wired to Firebase Auth; swap in your real backend plus Google Calendar logic when ready.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>
-              Accounts are cached in <code>localStorage</code> so you can switch between login and profile views without
-              any server calls.
+              Configure your Firebase project and add the keys in a <code>.env</code> file (see <code>src/lib/firebase.ts</code>).
             </p>
             <p>
-              Swap the helpers in <code>src/lib/auth.tsx</code> for real API requests once you have an authentication
-              service.
+              Every authenticated request should include <code>Authorization: Bearer &lt;id_token&gt;</code> so your backend can verify it with the Firebase Admin SDK.
             </p>
           </CardContent>
         </Card>
@@ -45,9 +58,21 @@ export default function Profile() {
 
 function ProfileDetails() {
   const { user, logout } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
 
   if (!user) {
     return null;
+  }
+
+  const displayName = user.displayName || "Set your name";
+
+  async function handleSignOut() {
+    try {
+      setSigningOut(true);
+      await logout();
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   return (
@@ -61,15 +86,19 @@ function ProfileDetails() {
           <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Display name
           </Label>
-          <p className="text-lg font-medium">{user.name}</p>
+          <p className="text-lg font-medium">{displayName}</p>
         </div>
         <div className="space-y-1">
           <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</Label>
           <p className="text-lg font-medium">{user.email}</p>
         </div>
+        <div className="space-y-1">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email verified</Label>
+          <p className="text-sm font-medium">{user.emailVerified ? "Yes" : "No"}</p>
+        </div>
         <div className="pt-2">
-          <Button type="button" variant="outline" onClick={logout}>
-            Sign out
+          <Button type="button" variant="outline" onClick={handleSignOut} disabled={signingOut}>
+            {signingOut ? "Signing out..." : "Sign out"}
           </Button>
         </div>
       </CardContent>
@@ -78,16 +107,18 @@ function ProfileDetails() {
 }
 
 function AuthGateway() {
-  const { login, signup, loading } = useAuth();
+  const { login, signup } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setSubmitting(true);
     try {
       if (mode === "login") {
         await login(email, password);
@@ -100,6 +131,8 @@ function AuthGateway() {
       } else {
         setError("Something went wrong. Please try again.");
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -111,8 +144,8 @@ function AuthGateway() {
         </CardTitle>
         <CardDescription>
           {mode === "login"
-            ? "Sign in to manage your calendar and assistant preferences."
-            : "Sign up to save your settings and sync events."}
+            ? "Sign in with your Firebase account to sync chat and calendar data."
+            : "Sign up to create a Firebase identity for your Calvera workspace."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -126,7 +159,7 @@ function AuthGateway() {
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Alex Student"
                 autoComplete="name"
-                disabled={loading}
+                disabled={submitting}
               />
             </div>
           )}
@@ -139,7 +172,7 @@ function AuthGateway() {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
               autoComplete={mode === "login" ? "email" : "new-email"}
-              disabled={loading}
+              disabled={submitting}
             />
           </div>
           <div className="space-y-2">
@@ -149,14 +182,14 @@ function AuthGateway() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="••••••••"
+              placeholder="********"
               autoComplete={mode === "login" ? "current-password" : "new-password"}
-              disabled={loading}
+              disabled={submitting}
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
           </Button>
         </form>
         <div className="text-center text-sm text-muted-foreground">

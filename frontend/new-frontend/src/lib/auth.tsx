@@ -1,10 +1,31 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
+import {
+  type AuthError,
+  type User as FirebaseUser,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
+} from "firebase/auth";
+
+import { auth } from "./firebase";
 
 export type AuthUser = {
-  id: string;
-  name: string;
-  email: string;
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  emailVerified: boolean;
 };
 
 export type AuthContextValue = {
@@ -12,171 +33,101 @@ export type AuthContextValue = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  getIdToken: (forceRefresh?: boolean) => Promise<string>;
 };
-
-const STORAGE_KEY = "calvera-auth-user";
-const ACCOUNTS_KEY = "calvera-auth-accounts";
-
-type StoredAccounts = Record<
-  string,
-  {
-    id: string;
-    name: string;
-  }
->;
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function generateId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `user-${Math.random().toString(36).slice(2, 10)}`;
+function mapFirebaseUser(user: FirebaseUser): AuthUser {
+  return {
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName,
+    photoURL: user.photoURL,
+    emailVerified: user.emailVerified,
+  };
 }
 
-function sanitizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function displayNameFromEmail(email: string) {
-  const localPart = email.split("@")[0] ?? "";
-  if (!localPart) {
-    return "User";
+function normalizeAuthError(error: unknown): Error {
+  if (typeof error === "object" && error && "code" in error) {
+    const { code, message } = error as AuthError;
+    switch (code) {
+      case "auth/invalid-email":
+        return new Error("Enter a valid email address.");
+      case "auth/user-not-found":
+      case "auth/wrong-password":
+        return new Error("Incorrect email or password.");
+      case "auth/email-already-in-use":
+        return new Error("An account with that email already exists.");
+      case "auth/weak-password":
+        return new Error("Password must be at least 6 characters.");
+      default:
+        return new Error(message || "Authentication failed.");
+    }
   }
-  return localPart.charAt(0).toUpperCase() + localPart.slice(1);
-}
-
-function readAccounts(): StoredAccounts {
-  if (typeof window === "undefined") {
-    return {};
-  }
-  const raw = window.localStorage.getItem(ACCOUNTS_KEY);
-  if (!raw) {
-    return {};
-  }
-  try {
-    return JSON.parse(raw) as StoredAccounts;
-  } catch {
-    return {};
-  }
-}
-
-function persistAccounts(accounts: StoredAccounts) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  return new Error("Authentication failed.");
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-      return null;
-    }
-    try {
-      return JSON.parse(stored) as AuthUser;
-    } catch {
-      return null;
-    }
-  });
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const firebaseUserRef = useRef<FirebaseUser | null>(auth.currentUser ?? null);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      firebaseUserRef.current = firebaseUser;
+      setUser(firebaseUser ? mapFirebaseUser(firebaseUser) : null);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const login = useCallback(async (email: string, password: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+    } catch (error) {
+      throw normalizeAuthError(error);
     }
-    if (user) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    } else {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-  }, [user]);
-
-  const simulateNetwork = useCallback(
-    () =>
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, 450);
-      }),
-    []
-  );
-
-  const login = useCallback(
-    async (email: string, password: string) => {
-      const nextEmail = sanitizeEmail(email);
-      const nextPassword = password.trim();
-
-      if (!nextEmail || !nextEmail.includes("@")) {
-        throw new Error("Enter a valid email address.");
-      }
-      if (nextPassword.length < 4) {
-        throw new Error("Password must be at least 4 characters.");
-      }
-
-      setLoading(true);
-      try {
-        await simulateNetwork();
-        const accounts = readAccounts();
-        const account = accounts[nextEmail];
-        const resolved: AuthUser = account
-          ? { id: account.id, name: account.name, email: nextEmail }
-          : { id: generateId(), name: displayNameFromEmail(nextEmail), email: nextEmail };
-
-        if (!account) {
-          accounts[nextEmail] = { id: resolved.id, name: resolved.name };
-          persistAccounts(accounts);
-        }
-
-        setUser(resolved);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [simulateNetwork]
-  );
+  }, []);
 
   const signup = useCallback(
     async (name: string, email: string, password: string) => {
-      const nextName = name.trim();
-      const nextEmail = sanitizeEmail(email);
-      const nextPassword = password.trim();
-
-      if (!nextName) {
-        throw new Error("Tell us what to call you.");
-      }
-      if (!nextEmail || !nextEmail.includes("@")) {
-        throw new Error("Enter a valid email address.");
-      }
-      if (nextPassword.length < 4) {
-        throw new Error("Password must be at least 4 characters.");
-      }
-
-      setLoading(true);
       try {
-        await simulateNetwork();
-        const nextUser: AuthUser = {
-          id: generateId(),
-          name: nextName,
-          email: nextEmail,
-        };
-        setUser(nextUser);
-
-        const accounts = readAccounts();
-        accounts[nextEmail] = { id: nextUser.id, name: nextUser.name };
-        persistAccounts(accounts);
-      } finally {
-        setLoading(false);
+        const { user: firebaseUser } = await createUserWithEmailAndPassword(
+          auth,
+          email.trim(),
+          password
+        );
+        const displayName = name.trim();
+        if (displayName) {
+          await updateProfile(firebaseUser, { displayName });
+          firebaseUserRef.current = auth.currentUser;
+          if (firebaseUserRef.current) {
+            setUser(mapFirebaseUser(firebaseUserRef.current));
+          }
+        }
+      } catch (error) {
+        throw normalizeAuthError(error);
       }
     },
-    [simulateNetwork]
+    []
   );
 
-  const logout = useCallback(() => {
-    setUser(null);
+  const logout = useCallback(async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      throw normalizeAuthError(error);
+    }
+  }, []);
+
+  const getIdToken = useCallback(async (forceRefresh = false) => {
+    const current = firebaseUserRef.current ?? auth.currentUser;
+    if (!current) {
+      throw new Error("You need to be signed in.");
+    }
+    return current.getIdToken(forceRefresh);
   }, []);
 
   const value = useMemo(
@@ -186,8 +137,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       signup,
       logout,
+      getIdToken,
     }),
-    [user, loading, login, signup, logout]
+    [user, loading, login, signup, logout, getIdToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

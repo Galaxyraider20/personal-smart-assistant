@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { requestChatReply } from "@/lib/chat-api";
 import { Send, X, MessageCircle } from "lucide-react";
 
 /**
@@ -11,12 +12,12 @@ import { Send, X, MessageCircle } from "lucide-react";
  *  - Calendar box (Google Calendar embed via iframe)
  *  - Minimal chat widget fixed to bottom-right
  *
- * Tailwind + shadcn/ui. No networking by default.
+ * Tailwind + shadcn/ui. Now wired to the FastAPI chat backend.
  */
 export type EventItem = {
   id: string;
   title: string;
-  when: string; // e.g. "Mon, Sep 22 • 10:00–11:00"
+  when: string; // e.g. "Mon, Sep 22 - 10:00-11:00"
   where?: string;
 };
 
@@ -31,9 +32,9 @@ const DEFAULT_CAL_EMBED =
   "https://calendar.google.com/calendar/embed?src=c_en.basic%40group.v.calendar.google.com&ctz=UTC";
 
 const sampleEvents: EventItem[] = [
-  { id: "1", title: "Team standup", when: "Mon, Sep 22 • 10:00–10:15", where: "Meet" },
-  { id: "2", title: "Design review", when: "Tue, Sep 23 • 13:00–14:00", where: "Room A" },
-  { id: "3", title: "1:1 Catch-up", when: "Wed, Sep 24 • 09:30–10:00" },
+  { id: "1", title: "Team standup", when: "Mon, Sep 22 - 10:00-10:15", where: "Meet" },
+  { id: "2", title: "Design review", when: "Tue, Sep 23 - 13:00-14:00", where: "Room A" },
+  { id: "3", title: "1:1 Catch-up", when: "Wed, Sep 24 - 09:30-10:00" },
 ];
 
 export default function HomeDashboard({
@@ -73,7 +74,7 @@ export default function HomeDashboard({
           </Card>
 
           {/* Calendar */}
-          <Card className="rounded-2xl shadow-sm bg-card text-card-foreground"> 
+          <Card className="rounded-2xl shadow-sm bg-card text-card-foreground">
             <CardHeader>
               <CardTitle className="text-xl">Calendar</CardTitle>
             </CardHeader>
@@ -89,48 +90,61 @@ export default function HomeDashboard({
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
                 Tip: pass a public Google Calendar embed URL via <code>calendarEmbedUrl</code>.
-                In Google Calendar: Settings → Select a calendar → Integrate calendar → "Public URL to this calendar".
+                In Google Calendar: Settings &gt; Select a calendar &gt; Integrate calendar &gt; "Public URL to this calendar".
               </p>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Chat widget (local state only) */}
+      {/* Chat widget wired to backend */}
       <ChatWidget />
     </div>
   );
 }
 
+type ChatMessage = { role: "user" | "bot"; text: string };
+
 function ChatWidget() {
   const [isOpen, setIsOpen] = useState(true);
-  const [messages, setMessages] = useState<{ role: "user" | "bot"; text: string }[]>([
-    { role: "bot", text: "Hi! This is a local demo chat. Type below." },
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "bot", text: "Hi! Ask me anything about your schedule." },
   ]);
   const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  const canSend = useMemo(() => input.trim().length > 0, [input]);
+  const canSend = useMemo(() => input.trim().length > 0 && !isSending, [input, isSending]);
 
-  function handleSend() {
-    if (!canSend) return;
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages]);
+
+  const handleSend = async () => {
     const text = input.trim();
-    setInput("");
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text },
-      { role: "bot", text: `Echo: ${text}` },
-    ]);
-    setTimeout(
-      () => listRef.current?.scrollTo({
-        top: listRef.current.scrollHeight,
-        behavior: "smooth",
-      }),
-      0
-    );
-  }
+    if (!text || isSending) return;
 
-  // When closed, show a small floating button to reopen
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", text }]);
+    setIsSending(true);
+
+    try {
+      const reply = await requestChatReply(text);
+      setMessages((prev) => [...prev, { role: "bot", text: reply }]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Chat request failed.";
+      setMessages((prev) => [
+        ...prev,
+        { role: "bot", text: `Error: ${message}` },
+      ]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   if (!isOpen) {
     return (
       <div className="fixed bottom-4 right-4 z-50">
@@ -181,14 +195,15 @@ function ChatWidget() {
 
           <div className="flex items-center gap-2">
             <Input
-              placeholder="Type a message…"
+              placeholder="Type a message..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleSend();
+                if (e.key === "Enter") void handleSend();
               }}
+              disabled={isSending}
             />
-            <Button type="button" onClick={handleSend} disabled={!canSend}>
+            <Button type="button" onClick={() => void handleSend()} disabled={!canSend}>
               <Send className="h-4 w-4" />
             </Button>
           </div>
@@ -197,4 +212,3 @@ function ChatWidget() {
     </div>
   );
 }
-
