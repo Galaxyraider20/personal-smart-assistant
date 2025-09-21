@@ -1,29 +1,24 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
+import { fetchCalendarEvents } from "@/lib/calendar";
 
-/** Basic event type */
+/** Calendar event type */
 export type CalEvent = {
   id: string;
   title: string;
-  start: Date | string; // accepts ISO string or Date
-  end?: Date | string;
-  where?: string;
+  start: Date | string;
+  end?: Date | string | null;
+  where?: string | null;
+  description?: string | null;
+  attendees?: string[];
 };
 
 interface CalendarProps {
   events?: CalEvent[];
   weekStartsOn?: 0 | 1; // 0=Sun, 1=Mon
 }
-
-const sampleEvents: CalEvent[] = [
-  { id: "1", title: "Team standup", start: new Date(), where: "Meet" },
-  { id: "2", title: "Design review", start: addDays(new Date(), 1) },
-  { id: "3", title: "1:1 Catch-up", start: addDays(new Date(), 2), where: "Room A" },
-  { id: "4", title: "Demo prep", start: addDays(new Date(), 2) },
-  { id: "5", title: "Sprint planning", start: addDays(new Date(), 7) },
-];
 
 /* ---------- tiny date helpers (no deps) ---------- */
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
@@ -47,14 +42,68 @@ function ymd(d: Date) {
 }
 function toDate(x: Date | string) { return x instanceof Date ? x : new Date(x); }
 
+function ensureId(id: string | null | undefined, fallbackSeed: string, index: number): string {
+  if (id && id.length > 0) return id;
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `event_${index}_${fallbackSeed}`;
+}
+
 /* ---------- the component ---------- */
 export default function CalendarPage({
-  events = sampleEvents,
+  events: externalEvents,
   weekStartsOn = 0,
 }: CalendarProps) {
   const today = startOfDay(new Date());
   const [viewDate, setViewDate] = useState<Date>(startOfMonth(today));
   const [selectedDate, setSelectedDate] = useState<Date>(today);
+  const [events, setEvents] = useState<CalEvent[]>(externalEvents ?? []);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (externalEvents) {
+      setEvents(externalEvents);
+    }
+  }, [externalEvents]);
+
+  useEffect(() => {
+    if (externalEvents) return;
+
+    const controller = new AbortController();
+    async function loadEvents() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const rangeStart = startOfWeek(startOfMonth(viewDate), weekStartsOn);
+        const rangeEnd = addDays(rangeStart, 42);
+        const data = await fetchCalendarEvents({ start: rangeStart, end: rangeEnd, signal: controller.signal });
+        const normalized: CalEvent[] = data.events.map((ev, index) => ({
+          id: ensureId(ev.id, ev.start_time, index),
+          title: ev.title,
+          start: ev.start_time,
+          end: ev.end_time ?? undefined,
+          where: ev.location ?? undefined,
+          description: ev.description ?? undefined,
+          attendees: ev.attendees,
+        }));
+        setEvents(normalized);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        const message = err instanceof Error ? err.message : "Failed to load calendar events.";
+        setError(message);
+        setEvents([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadEvents();
+    return () => controller.abort();
+  }, [externalEvents, viewDate, weekStartsOn]);
 
   // Normalize + index events per day (YYYY-MM-DD)
   const eventsByDay = useMemo(() => {
@@ -68,8 +117,8 @@ export default function CalendarPage({
   }, [events]);
 
   // Build a 6x7 grid starting at the week containing the 1st of the month
-  const gridStart = startOfWeek(startOfMonth(viewDate), weekStartsOn);
-  const days: Date[] = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+  const gridStart = useMemo(() => startOfWeek(startOfMonth(viewDate), weekStartsOn), [viewDate, weekStartsOn]);
+  const days: Date[] = useMemo(() => Array.from({ length: 42 }, (_, i) => addDays(gridStart, i)), [gridStart]);
 
   const weekdayLabels =
     weekStartsOn === 1
@@ -83,6 +132,10 @@ export default function CalendarPage({
   const selectedKey = ymd(selectedDate);
   const selectedEvents = eventsByDay.get(selectedKey) ?? [];
 
+  const authHelp = error && /not authenticated/i.test(error)
+    ? "Connect your Google account from Settings to view your calendar."
+    : null;
+
   return (
     <div className="min-h-screen bg-background text-foreground p-4 md:p-6">
       <div className="mx-auto max-w-6xl grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -93,6 +146,9 @@ export default function CalendarPage({
               <CardTitle className="flex items-center gap-2 text-xl">
                 <CalendarIcon className="h-5 w-5" />
                 {formatMonthYear(viewDate)}
+                {isLoading && (
+                  <span className="text-xs font-normal text-muted-foreground">Syncing...</span>
+                )}
               </CardTitle>
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={goToday}>Today</Button>
@@ -104,6 +160,11 @@ export default function CalendarPage({
                 </Button>
               </div>
             </CardHeader>
+            {(error || authHelp) && (
+              <div className="px-6 pb-4 text-sm text-destructive">
+                {authHelp ?? `Error loading events: ${error}`}
+              </div>
+            )}
           </Card>
         </div>
 
@@ -186,7 +247,9 @@ export default function CalendarPage({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {selectedEvents.length === 0 ? (
+              {isLoading ? (
+                <p className="text-sm text-muted-foreground">Loading events...</p>
+              ) : selectedEvents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No events.</p>
               ) : (
                 <ul className="space-y-2">
@@ -199,6 +262,11 @@ export default function CalendarPage({
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {formatTimeRange(ev)}
                       </div>
+                      {ev.description && (
+                        <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                          {ev.description}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -216,7 +284,8 @@ function formatTimeRange(ev: CalEvent) {
   const s = toDate(ev.start);
   const e = ev.end ? toDate(ev.end) : null;
   const fmt = (d: Date) => d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return e ? `${fmt(s)} – ${fmt(e)}` : fmt(s);
+  return e ? `${fmt(s)} - ${fmt(e)}` : fmt(s);
 }
+
 
 
